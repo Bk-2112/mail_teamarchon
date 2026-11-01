@@ -43,7 +43,51 @@ public class StalwartMailService
             await client.AuthenticateAsync(userOnly, plainPassword);
         }
 
-        var folder = await client.GetFolderAsync(folderName) ?? client.Inbox;
+        IMailFolder? folder = null;
+        if (string.Equals(folderName, "INBOX", StringComparison.OrdinalIgnoreCase))
+        {
+            folder = client.Inbox;
+        }
+        else
+        {
+            try
+            {
+                folder = await client.GetFolderAsync(folderName);
+            }
+            catch (FolderNotFoundException)
+            {
+                // Fall back to MailKit special-use folders
+                var specialFolder = folderName.ToLowerInvariant() switch
+                {
+                    "sent" or "sent messages" or "sent items" => SpecialFolder.Sent,
+                    "drafts" => SpecialFolder.Drafts,
+                    "trash" => SpecialFolder.Trash,
+                    "junk" or "spam" => SpecialFolder.Junk,
+                    "archive" => SpecialFolder.Archive,
+                    _ => (SpecialFolder?)null
+                };
+
+                if (specialFolder.HasValue)
+                {
+                    try
+                    {
+                        folder = client.GetFolder(specialFolder.Value);
+                    }
+                    catch
+                    {
+                        folder = null;
+                    }
+                }
+            }
+        }
+
+        // If folder doesn't exist yet on Stalwart, return an empty list gracefully
+        if (folder == null)
+        {
+            await client.DisconnectAsync(true);
+            return new List<EmailSummaryDto>();
+        }
+
         await folder.OpenAsync(FolderAccess.ReadOnly);
 
         var count = folder.Count;
@@ -103,7 +147,40 @@ public class StalwartMailService
             await client.AuthenticateAsync(userOnly, plainPassword);
         }
 
-        var folder = await client.GetFolderAsync(folderName) ?? client.Inbox;
+        IMailFolder? folder = null;
+        if (string.Equals(folderName, "INBOX", StringComparison.OrdinalIgnoreCase))
+        {
+            folder = client.Inbox;
+        }
+        else
+        {
+            try
+            {
+                folder = await client.GetFolderAsync(folderName);
+            }
+            catch (FolderNotFoundException)
+            {
+                var specialFolder = folderName.ToLowerInvariant() switch
+                {
+                    "sent" or "sent messages" or "sent items" => SpecialFolder.Sent,
+                    "drafts" => SpecialFolder.Drafts,
+                    "trash" => SpecialFolder.Trash,
+                    _ => (SpecialFolder?)null
+                };
+
+                if (specialFolder.HasValue)
+                {
+                    try { folder = client.GetFolder(specialFolder.Value); } catch { folder = null; }
+                }
+            }
+        }
+
+        if (folder == null)
+        {
+            await client.DisconnectAsync(true);
+            return null;
+        }
+
         await folder.OpenAsync(FolderAccess.ReadWrite);
 
         var mimeMessage = await folder.GetMessageAsync(new UniqueId(uid));
@@ -201,6 +278,45 @@ public class StalwartMailService
 
             await client.SendAsync(message);
             await client.DisconnectAsync(true);
+
+            // Best effort: Append sent email to the Sent folder so it appears in /sent
+            try
+            {
+                using var imapClient = new ImapClient();
+                imapClient.ServerCertificateValidationCallback = (s, c, h, e) => true;
+                var imapOptions = mailbox.ImapSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTlsWhenAvailable;
+                await imapClient.ConnectAsync(mailbox.ImapHost, mailbox.ImapPort, imapOptions);
+                try
+                {
+                    await imapClient.AuthenticateAsync(mailbox.Email, plainPassword);
+                }
+                catch
+                {
+                    var userOnly = mailbox.Email.Split('@')[0];
+                    await imapClient.AuthenticateAsync(userOnly, plainPassword);
+                }
+
+                IMailFolder? sentFolder = null;
+                try
+                {
+                    sentFolder = imapClient.GetFolder(SpecialFolder.Sent);
+                }
+                catch
+                {
+                    try { sentFolder = await imapClient.GetFolderAsync("Sent"); } catch { }
+                }
+
+                if (sentFolder != null)
+                {
+                    await sentFolder.OpenAsync(FolderAccess.ReadWrite);
+                    await sentFolder.AppendAsync(message, MessageFlags.Seen);
+                }
+                await imapClient.DisconnectAsync(true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to append sent message to Sent folder for {Email}", mailbox.Email);
+            }
 
             // 100% Categorized Logging to #mail-logs Webhook
             _discordLogger.LogMail(
