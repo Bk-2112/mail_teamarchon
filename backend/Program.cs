@@ -47,7 +47,6 @@ builder.Services.AddSingleton<DatabaseService>();
 builder.Services.AddSingleton<EncryptionService>();
 builder.Services.AddSingleton<UserRepository>();
 builder.Services.AddSingleton<StalwartMailService>();
-builder.Services.AddScoped<IDiscordAuthService, DiscordAuthService>();
 
 // 4. Categorized Discord Webhook Logging Engine (Hosted Background Service)
 builder.Services.AddSingleton<DiscordWebhookLogger>();
@@ -128,8 +127,8 @@ discordLogger.LogSystem(
     new[]
     {
         ("Environment", app.Environment.EnvironmentName),
-        ("Version", "3.0.0"),
-        ("Auth Gateway", "Discord OAuth2 (Gated) & Credentials"),
+        ("Version", "3.1.0"),
+        ("Auth Gateway", "Direct PBKDF2 Hashed Credentials & Enterprise Groups"),
         ("Database", "Supabase PostgreSQL")
     });
 

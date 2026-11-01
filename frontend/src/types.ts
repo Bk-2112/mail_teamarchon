@@ -1,8 +1,9 @@
 export interface UserRecord {
   id: string
   discordId?: string
-  discordUsername: string
+  discordUsername?: string
   discordAvatar?: string
+  displayName?: string
   email: string
   roles: string[]
   isActive: boolean
@@ -24,6 +25,21 @@ export interface MailboxRecord {
 }
 
 export type Mailbox = MailboxRecord
+
+export interface GroupRecord {
+  id: string
+  name: string
+  description?: string
+  memberCount: number
+  mailboxCount: number
+  createdAt: string
+}
+
+export interface GroupDetail {
+  group: GroupRecord
+  members: UserRecord[]
+  mailboxes: MailboxRecord[]
+}
 
 export interface EmailAttachment {
   fileName: string

@@ -139,15 +139,27 @@ export default function Layout({ children }: LayoutProps) {
           {/* User Profile */}
           <div className="user-profile">
             <div className="user-info">
-              <img
-                src={user?.discordAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}
-                alt={user?.discordUsername || 'User'}
-                className="avatar"
-              />
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  background: isAdmin ? 'rgba(211, 47, 47, 0.2)' : '#222',
+                  border: `1px solid ${isAdmin ? 'var(--accent-red)' : '#333'}`,
+                  color: isAdmin ? '#ff6b6b' : '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 700,
+                  fontSize: '13px'
+                }}
+              >
+                {(user?.displayName || user?.email || 'U').charAt(0).toUpperCase()}
+              </div>
               <div className="user-details">
-                <span className="user-name">{user?.discordUsername || 'Discord User'}</span>
+                <span className="user-name">{user?.displayName || user?.email || 'User'}</span>
                 <span className="user-role">
-                  {user?.roles?.[0] || 'Verified Member'}
+                  {isAdmin ? 'Administrator' : 'Member'}
                 </span>
               </div>
             </div>

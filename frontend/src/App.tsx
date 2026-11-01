@@ -2,7 +2,6 @@ import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import LoginPage from './pages/LoginPage'
-import AuthCallbackPage from './pages/AuthCallbackPage'
 import InboxPage from './pages/InboxPage'
 import ThreadPage from './pages/ThreadPage'
 import AdminPage from './pages/AdminPage'
@@ -22,9 +21,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Unauthenticated Routes */}
+        {/* Unauthenticated Route */}
         <Route path="/login" element={token ? <Navigate to="/inbox" replace /> : <LoginPage />} />
-        <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
         {/* Authenticated Routes wrapped in Layout */}
         <Route path="/inbox" element={<RequireAuth><Layout><InboxPage /></Layout></RequireAuth>} />

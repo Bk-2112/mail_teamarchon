@@ -8,6 +8,7 @@ public class UserRecord
     public string? DiscordId { get; set; }
     public string DiscordUsername { get; set; } = string.Empty;
     public string? DiscordAvatar { get; set; }
+    public string? DisplayName { get; set; }
     public string Email { get; set; } = string.Empty;
 
     [JsonIgnore]
@@ -43,6 +44,60 @@ public class UserMailboxAccess
     public Guid MailboxId { get; set; }
     public string Role { get; set; } = "member"; // "owner", "member", "read_only"
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class GroupRecord
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public int MemberCount { get; set; }
+    public int MailboxCount { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class CreateGroupRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+}
+
+public class AssignGroupMemberRequest
+{
+    public Guid UserId { get; set; }
+    public string Role { get; set; } = "member";
+}
+
+public class AssignGroupMailboxRequest
+{
+    public Guid MailboxId { get; set; }
+}
+
+public class GroupDetailDto
+{
+    public GroupRecord Group { get; set; } = new();
+    public List<UserRecord> Members { get; set; } = new();
+    public List<MailboxRecord> Mailboxes { get; set; } = new();
+}
+
+public class CreateUserAdminRequest
+{
+    public string Email { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+    public string? DisplayName { get; set; }
+    public string Role { get; set; } = "member"; // "admin", "member"
+}
+
+public class ResetUserPasswordRequest
+{
+    public string Password { get; set; } = string.Empty;
+}
+
+public class AssignMailboxRequest
+{
+    public Guid UserId { get; set; }
+    public Guid MailboxId { get; set; }
+    public string Role { get; set; } = "member"; // "owner", "member", "read_only"
 }
 
 public class EmailSummaryDto
@@ -84,12 +139,6 @@ public class SendEmailRequest
     public string Subject { get; set; } = string.Empty;
     public string BodyHtml { get; set; } = string.Empty;
     public string? BodyText { get; set; }
-}
-
-public class DiscordLoginRequest
-{
-    public string Code { get; set; } = string.Empty;
-    public string RedirectUri { get; set; } = string.Empty;
 }
 
 public class EmailLoginRequest

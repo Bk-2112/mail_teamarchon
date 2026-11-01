@@ -6,26 +6,24 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Drop legacy tables to start 100% clean
-DROP TABLE IF EXISTS public.audit_logs CASCADE;
-DROP TABLE IF EXISTS public.user_mailboxes CASCADE;
-DROP TABLE IF EXISTS public.mailboxes CASCADE;
-DROP TABLE IF EXISTS public.users CASCADE;
-DROP TABLE IF EXISTS public.user_profiles CASCADE;
-DROP TABLE IF EXISTS public.labels CASCADE;
-DROP TABLE IF EXISTS public.filters CASCADE;
-DROP TABLE IF EXISTS public.messages CASCADE;
-DROP TABLE IF EXISTS public.system_settings CASCADE;
-DROP VIEW IF EXISTS public.accounts CASCADE;
+-- Drop legacy tables if doing a 100% clean wipe
+-- DROP TABLE IF EXISTS public.group_mailboxes CASCADE;
+-- DROP TABLE IF EXISTS public.group_members CASCADE;
+-- DROP TABLE IF EXISTS public.groups CASCADE;
+-- DROP TABLE IF EXISTS public.audit_logs CASCADE;
+-- DROP TABLE IF EXISTS public.user_mailboxes CASCADE;
+-- DROP TABLE IF EXISTS public.mailboxes CASCADE;
+-- DROP TABLE IF EXISTS public.users CASCADE;
 
--- 1. Users Table: Managed via Discord OAuth2 or Email/Password Credentials
-CREATE TABLE public.users (
+-- 1. Users Table: Provisioned by Admin with Salted & Hashed PBKDF2 Credentials
+CREATE TABLE IF NOT EXISTS public.users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     discord_id VARCHAR(64) UNIQUE,
     discord_username VARCHAR(100),
     discord_avatar VARCHAR(255),
+    display_name VARCHAR(100),
     email VARCHAR(255) NOT NULL UNIQUE,
-    password_hash VARCHAR(255), -- Secure PBKDF2 hash (salt.hash)
+    password_hash VARCHAR(255) NOT NULL, -- PBKDF2-HMAC-SHA256 (128-bit salt, 100k iterations)
     roles TEXT[] DEFAULT '{member}',
     is_active BOOLEAN NOT NULL DEFAULT true,
     last_login_at TIMESTAMPTZ,
@@ -34,7 +32,7 @@ CREATE TABLE public.users (
 );
 
 -- 2. Mailboxes Table: Physical accounts on VPS Stalwart Mail Server
-CREATE TABLE public.mailboxes (
+CREATE TABLE IF NOT EXISTS public.mailboxes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) NOT NULL UNIQUE,
     display_name VARCHAR(255),
@@ -49,8 +47,8 @@ CREATE TABLE public.mailboxes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 3. User to Mailbox Access Control (RBAC)
-CREATE TABLE public.user_mailboxes (
+-- 3. User to Mailbox Access Control (Direct RBAC)
+CREATE TABLE IF NOT EXISTS public.user_mailboxes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     mailbox_id UUID NOT NULL REFERENCES public.mailboxes(id) ON DELETE CASCADE,
@@ -59,8 +57,35 @@ CREATE TABLE public.user_mailboxes (
     UNIQUE(user_id, mailbox_id)
 );
 
--- 4. Audit Log Table
-CREATE TABLE public.audit_logs (
+-- 4. Groups / Distribution Lists Table
+CREATE TABLE IF NOT EXISTS public.groups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 5. Group Members Table (Users assigned to Groups)
+CREATE TABLE IF NOT EXISTS public.group_members (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID NOT NULL REFERENCES public.groups(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    role VARCHAR(50) NOT NULL DEFAULT 'member',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(group_id, user_id)
+);
+
+-- 6. Group Mailboxes Table (Mailboxes assigned to Groups)
+CREATE TABLE IF NOT EXISTS public.group_mailboxes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID NOT NULL REFERENCES public.groups(id) ON DELETE CASCADE,
+    mailbox_id UUID NOT NULL REFERENCES public.mailboxes(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(group_id, mailbox_id)
+);
+
+-- 7. Audit Log Table
+CREATE TABLE IF NOT EXISTS public.audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
     category VARCHAR(50) NOT NULL,
@@ -70,14 +95,15 @@ CREATE TABLE public.audit_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 5. Performance Indexes
-CREATE INDEX idx_users_discord_id ON public.users(discord_id);
-CREATE INDEX idx_users_email ON public.users(email);
-CREATE INDEX idx_mailboxes_email ON public.mailboxes(email);
-CREATE INDEX idx_user_mailboxes_user_id ON public.user_mailboxes(user_id);
-CREATE INDEX idx_audit_logs_created_at ON public.audit_logs(created_at DESC);
+-- 8. Performance Indexes
+CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
+CREATE INDEX IF NOT EXISTS idx_mailboxes_email ON public.mailboxes(email);
+CREATE INDEX IF NOT EXISTS idx_user_mailboxes_user_id ON public.user_mailboxes(user_id);
+CREATE INDEX IF NOT EXISTS idx_group_members_user_id ON public.group_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_group_mailboxes_mailbox_id ON public.group_mailboxes(mailbox_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs(created_at DESC);
 
--- 6. Insert Default Primary Mailbox (Stalwart on VPS)
+-- 9. Insert Primary Admin Mailbox (Stalwart on VPS)
 INSERT INTO public.mailboxes (email, display_name, imap_host, imap_port, imap_ssl, smtp_host, smtp_port, smtp_ssl, encrypted_password, is_active)
 VALUES (
     'admin@teamarchon.in',
@@ -88,14 +114,7 @@ VALUES (
     '127.0.0.1',
     465,
     true,
-    -- AES encrypted placeholder (updated automatically by backend or admin)
-    'k6aD4V0d6L+uBqN8/2Z80A==',
+    'ArchonAdmin2026!',
     true
 )
-ON CONFLICT (email) DO NOTHING;
-
--- ==============================================================================
--- Quick Migration Patch for existing databases (run this if you already deployed):
--- ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);
--- ALTER TABLE public.users ALTER COLUMN discord_id DROP NOT NULL;
--- ==============================================================================
+ON CONFLICT (email) DO UPDATE SET encrypted_password = 'ArchonAdmin2026!';
